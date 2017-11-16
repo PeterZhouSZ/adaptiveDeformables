@@ -1,14 +1,14 @@
 #pragma once
 
 #include <vector>
-#include <string>
+#include <json/json.h>
 #include "Particle.hpp"
 
 struct DeformableObject{
 
-  DeformableObject(const std::string& filename);
+  DeformableObject(const Json::Value& jv);
 
-
+  void computeNeighbors();
 
   
   std::vector<Particle> particles;

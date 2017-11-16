@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <numeric>
+#include "World.hpp"
 #include "DeformableObject.hpp"
 
 
@@ -12,7 +13,8 @@ int main(int argc, char** argv){
 	return 1;
   }
 
-  DeformableObject d(argv[1]);
+  World w(argv[1]);
+  DeformableObject d = w.dos.front();
 
   std::cout << d.particles.size() << std::endl;
 

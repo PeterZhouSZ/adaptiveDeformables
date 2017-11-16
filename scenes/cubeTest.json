@@ -1,0 +1,7 @@
+{
+
+	"deformableObjects" : [
+		{ "particleFile" : "models/cube1m1000verts.pts" }
+		]
+	
+}

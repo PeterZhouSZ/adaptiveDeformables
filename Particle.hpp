@@ -5,5 +5,6 @@
 struct Particle{
   Vec3 position;
 
+  std::vector<std::pair<int, Vec3> > neighbors;
   
 };

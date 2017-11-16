@@ -2,13 +2,14 @@
 #include <fstream>
 #include <random>
 #include <iostream>
+#include <json/json.h>
+
+DeformableObject::DeformableObject(const Json::Value& jv){
 
 
-DeformableObject::DeformableObject(const std::string& filename){
-
-
-  std::ifstream ins(filename, std::ios::binary);
-
+  std::string filename = jv["particleFile"].asString();
+  std::ifstream ins(filename);
+  
   size_t numParticles;
   ins.read(reinterpret_cast<char*>(&numParticles), sizeof(numParticles));
 
@@ -88,3 +89,7 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
   return centers;
 }
  
+
+void DeformableObject::computeNeighbors(){
+  
+}
