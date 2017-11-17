@@ -4,6 +4,8 @@
 #include <iostream>
 #include <json/json.h>
 
+#include "AccelerationGrid.hpp"
+
 DeformableObject::DeformableObject(const Json::Value& jv){
 
 
@@ -91,5 +93,52 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
  
 
 void DeformableObject::computeNeighbors(){
+
+  struct GetPos{
+	Vec3 operator()(const Particle& p) const { return p.position; }
+  };
+
+  int nb = std::sqrt(std::sqrt(particles.size())); //use 4th root of n buckets?
+  AccelerationGrid<Particle, GetPos> ag(nb);
+  ag.updateGrid(particles);
   
+  auto delta = ag.getDelta();
+  double radius = std::min({delta.x(), delta.y(), delta.z()});
+  
+  for(int i = 0; i < particles.size(); ++i){
+	auto& p = particles[i];
+	
+	auto neighbors = ag.getNearestNeighbors(particles, p.position, radius);
+	while(neighbors.size() < (desiredNumNeighbors() + 1)){ //count p itself, which won't be a neighbor
+	  std::cout << "doubling radius" << std::endl;
+	  radius *= 2;
+	  neighbors = ag.getNearestNeighbors(particles, p.position, radius);
+	}
+
+	neighbors.erase(std::find(neighbors.begin(), neighbors.end(), i), neighbors.end());
+	std::sort(neighbors.begin(), neighbors.end(),
+		[this, &p](int a, int b){
+		  return (particles[a].position - p.position).squaredNorm() <
+			(particles[b].position - p.position).squaredNorm();
+		});
+
+	neighbors.resize(desiredNumNeighbors());
+
+	p.neighbors.resize(neighbors.size());
+	for(auto j = 0; j < neighbors.size(); ++j){
+	  p.neighbors[j].first = neighbors[j];
+	  p.neighbors[j].second = particles[neighbors[j]].position - p.position;
+	}
+	
+  }
+
+
+
+  /*for(const auto& p : particles){
+	std::cout << "particle " << std::endl;
+	for(const auto& pr : p.neighbors){
+	  std::cout << pr.first << pr.second << std::endl;
+	}
+	std::cout << std::endl;
+	}*/
 }

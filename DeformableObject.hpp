@@ -12,6 +12,8 @@ struct DeformableObject{
 
   
   std::vector<Particle> particles;
+
+  int desiredNumNeighbors() const { return 32; }
   
 };
 

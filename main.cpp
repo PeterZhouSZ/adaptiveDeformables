@@ -22,6 +22,9 @@ int main(int argc, char** argv){
   std::iota(indices.begin(), indices.end(), 0);
 
   auto clusters = kMeans(d, indices, 10);
+
+
+  d.computeNeighbors();
   
   return 0;
 }
