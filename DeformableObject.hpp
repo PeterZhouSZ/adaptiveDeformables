@@ -10,6 +10,9 @@ struct DeformableObject{
 
   void computeNeighbors();
 
+  void applyGravity(double dt);
+  void applyElasticForces(double dt);
+  void updatePositions(double dt);
   
   std::vector<Particle> particles;
 

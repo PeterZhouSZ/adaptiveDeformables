@@ -20,7 +20,8 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.x())), sizeof(double));
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.y())), sizeof(double));
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.z())), sizeof(double));
-	std::cout << particles[i].position << '\n' << std::endl;
+
+	particles[i].velocity = Vec3::Zero();
   }
   
 }
@@ -141,4 +142,23 @@ void DeformableObject::computeNeighbors(){
 	}
 	std::cout << std::endl;
 	}*/
+}
+
+void DeformableObject::applyGravity(double dt){
+  for(auto& p : particles){
+	p.velocity -= dt*Vec3(0, 9.81, 0);
+  }
+}
+
+
+void DeformableObject::applyElasticForces(double dt){
+  
+}
+
+
+void DeformableObject::updatePositions(double dt){
+  for(auto& p : particles){
+	p.position += dt*p.velocity;
+  }
+  
 }

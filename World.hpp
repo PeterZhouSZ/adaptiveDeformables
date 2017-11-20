@@ -11,7 +11,9 @@ public:
 
   World(std::string_view filename);
 
+  void step();
 
+  double dt;
   std::vector<DeformableObject> dos;
 
 };
