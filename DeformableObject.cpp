@@ -11,6 +11,26 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 
   std::string filename = jv["particleFile"].asString();
   std::ifstream ins(filename);
+
+
+
+  if(!jv.isMember("lambda")){
+	throw std::runtime_error("you didn't specify lambda for a deformable object");
+  }
+  lambda = jv["lambda"].asDouble();
+
+  
+  if(!jv.isMember("mu")){
+	throw std::runtime_error("you didn't specify mu for a deformable object");
+  }
+  mu = jv["mu"].asDouble();
+
+  
+  if(!jv.isMember("density")){
+	throw std::runtime_error("you didn't specify density for a deformable object");
+  }
+  density = jv["density"].asDouble();
+
   
   size_t numParticles;
   ins.read(reinterpret_cast<char*>(&numParticles), sizeof(numParticles));
@@ -23,6 +43,9 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 
 	particles[i].velocity = Vec3::Zero();
   }
+
+  computeNeighbors();
+  computeBasisAndVolume();
   
 }
 
@@ -126,9 +149,13 @@ void DeformableObject::computeNeighbors(){
 	neighbors.resize(desiredNumNeighbors());
 
 	p.neighbors.resize(neighbors.size());
+	//set the radius to be the distance to the furthest neighbor
+	p.kernelRadius = (particles[neighbors.back()].position - p.position).norm();
+	
 	for(auto j = 0; j < neighbors.size(); ++j){
-	  p.neighbors[j].first = neighbors[j];
-	  p.neighbors[j].second = particles[neighbors[j]].position - p.position;
+	  p.neighbors[j].index = neighbors[j];
+	  p.neighbors[j].uij = particles[neighbors[j]].position - p.position;
+	  p.neighbors[j].wij = poly6(p.neighbors[j].uij.squaredNorm(), p.kernelRadius);
 	}
 	
   }
@@ -152,6 +179,40 @@ void DeformableObject::applyGravity(double dt){
 
 
 void DeformableObject::applyElasticForces(double dt){
+
+  forces.assign(particles.size(), Vec3::Zero());
+  
+  for(int i = 0; i < particles.size(); ++i){
+	auto& p = particles[i];
+
+	Mat3 ux = Mat3::Zero();
+	for(const auto& n : p.neighbors){
+	  ux += n.wij*(p.position - particles[n.index].position)*n.uij.transpose();
+	}
+	
+	Mat3 F = ux*p.Ainv;
+
+	Eigen::JacobiSVD<Mat3> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+	Vec3 FHat = svd.singularValues();
+	Vec3 diagStress = lambda*(FHat(0) + FHat(1) + FHat(2) - 3)*Vec3(1,1,1) +
+	  2*mu*(FHat - Vec3(1,1,1));
+
+	Mat3 rotStress = svd.matrixU()*diagStress.asDiagonal()*svd.matrixV().transpose();
+
+	Mat3 forceCommon = p.volume*rotStress*p.Ainv;
+	
+	for(const auto& n : p.neighbors){
+	  Vec3 fi = forceCommon*(n.wij*n.uij);
+	  forces[i] += fi;
+	  forces[n.index] -= fi;
+	}
+	
+  }
+
+  //now modify velocities
+  for(int i = 0; i < particles.size(); ++i){
+	particles[i].velocity += forces[i]/(particles[i].volume*density);
+  }
   
 }
 
@@ -159,6 +220,22 @@ void DeformableObject::applyElasticForces(double dt){
 void DeformableObject::updatePositions(double dt){
   for(auto& p : particles){
 	p.position += dt*p.velocity;
+  }
+  
+}
+
+
+void DeformableObject::computeBasisAndVolume(){
+  
+  for(auto& p : particles){
+	Mat3 A = Mat3::Zero();
+	double wSum = 0;
+	for(const auto& n : p.neighbors){
+	  A += n.wij* n.uij* n.uij.transpose();
+	  wSum += n.wij;
+	}
+	p.Ainv = A.inverse();
+	p.volume = std::sqrt(A.determinant()/std::pow(wSum, 3));
   }
   
 }

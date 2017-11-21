@@ -23,8 +23,6 @@ int main(int argc, char** argv){
 
   auto clusters = kMeans(d, indices, 10);
 
-
-  d.computeNeighbors();
   
   return 0;
 }

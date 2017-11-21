@@ -2,9 +2,20 @@
 
 #include "Util.hpp"
 
+struct Neighbor{
+  int index;
+  Vec3 uij;
+  double wij;
+};
+
 struct Particle{
   Vec3 position;
   Vec3 velocity;
-  std::vector<std::pair<int, Vec3> > neighbors;
+
+  Mat3 Ainv;
+  double volume;
+  double kernelRadius;
+  
+  std::vector<Neighbor> neighbors;
   
 };

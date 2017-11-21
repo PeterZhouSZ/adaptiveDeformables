@@ -8,15 +8,27 @@ struct DeformableObject{
 
   DeformableObject(const Json::Value& jv);
 
+  //initialization stuff
   void computeNeighbors();
+  void computeBasisAndVolume();
 
+  //timestepping methods
   void applyGravity(double dt);
   void applyElasticForces(double dt);
   void updatePositions(double dt);
   
-  std::vector<Particle> particles;
 
-  int desiredNumNeighbors() const { return 32; }
+
+  //data
+  std::vector<Particle> particles;
+  double lambda, mu, density;
+  //static constants confuse me
+  int desiredNumNeighbors() const { return 16; } 
+
+private:
+  //use to accumulate forces.  Stored as a member to avoid allocationg it each timestep
+  std::vector<Vec3> forces;
+  
   
 };
 
