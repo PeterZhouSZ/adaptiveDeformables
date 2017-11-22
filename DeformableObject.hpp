@@ -8,6 +8,8 @@ struct DeformableObject{
 
   DeformableObject(const Json::Value& jv);
 
+  void dump(const std::string& filename) const;
+  
   //initialization stuff
   void computeNeighbors();
   void computeBasisAndVolume();
@@ -16,7 +18,7 @@ struct DeformableObject{
   void applyGravity(double dt);
   void applyElasticForces(double dt);
   void updatePositions(double dt);
-  
+  void bounceOffGround();
 
 
   //data

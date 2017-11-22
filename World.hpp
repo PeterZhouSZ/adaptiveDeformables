@@ -12,8 +12,11 @@ public:
   World(std::string_view filename);
 
   void step();
+  void dump();
 
+  double elapsedTime, duration;
   double dt;
   std::vector<DeformableObject> dos;
 
+  int frameNumber;
 };

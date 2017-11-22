@@ -13,8 +13,8 @@ int main(int argc, char** argv){
 	return 1;
   }
 
-  World w(argv[1]);
-  DeformableObject d = w.dos.front();
+  World world(argv[1]);
+  DeformableObject d = world.dos.front();
 
   std::cout << d.particles.size() << std::endl;
 
@@ -23,6 +23,13 @@ int main(int argc, char** argv){
 
   auto clusters = kMeans(d, indices, 10);
 
+  while(world.elapsedTime <= world.duration){
+	world.dump();
+	world.step();
+	
+	std::cout << "time: " << world.elapsedTime << std::endl;
+  }
+  
   
   return 0;
 }

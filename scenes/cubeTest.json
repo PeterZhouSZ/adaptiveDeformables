@@ -1,7 +1,14 @@
 {
 	"dt" : 0.01666667,
+	"duration" : 5,
 	"deformableObjects" : [
-		{ "particleFile" : "models/cube1m1000verts.pts" }
-		]
+		{
+			"particleFile" : "models/cube1m1000verts.pts" ,
+			"translation" : [0, 3, 0],
+			"lambda" : 1e3,
+			"mu" : 1e3,
+			"density" : 600
+		}
+	]
 	
 }

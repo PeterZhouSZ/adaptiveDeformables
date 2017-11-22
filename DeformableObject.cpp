@@ -31,6 +31,13 @@ DeformableObject::DeformableObject(const Json::Value& jv){
   }
   density = jv["density"].asDouble();
 
+  Vec3 translation = Vec3::Zero();
+  if(jv.isMember("translation")){
+	translation.x() = jv["translation"][0].asDouble();
+	translation.y() = jv["translation"][1].asDouble();
+	translation.z() = jv["translation"][2].asDouble();
+  }
+  
   
   size_t numParticles;
   ins.read(reinterpret_cast<char*>(&numParticles), sizeof(numParticles));
@@ -40,7 +47,7 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.x())), sizeof(double));
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.y())), sizeof(double));
 	ins.read(reinterpret_cast<char*>(&(particles[i].position.z())), sizeof(double));
-
+	particles[i].position += translation;
 	particles[i].velocity = Vec3::Zero();
   }
 
@@ -238,4 +245,29 @@ void DeformableObject::computeBasisAndVolume(){
 	p.volume = std::sqrt(A.determinant()/std::pow(wSum, 3));
   }
   
+}
+
+
+void DeformableObject::bounceOffGround(){
+  for(auto& p : particles){
+	if(p.position.y() < 0){
+	  p.position.y() = 0;
+	  p.velocity.y() = 0;
+	}
+  }
+}
+
+void DeformableObject::dump(const std::string& filename) const{
+  std::ofstream outs(filename, std::ios::binary);
+  if(!outs){
+	throw std::runtime_error("couldn't open output file");
+  }
+  
+  size_t np = particles.size();
+
+  outs.write(reinterpret_cast<const char*>(&np), sizeof(np));
+
+  for(const auto& p : particles){
+	outs.write(reinterpret_cast<const char*>(p.position.data()), 3*sizeof(p.position.x()));
+  }
 }
