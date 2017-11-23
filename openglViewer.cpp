@@ -84,12 +84,12 @@ int main(int argc, char** argv){
 
 
 void readFrame(){
-
+  std::cout << "loading frame: " << currentFrame << std::endl;
   for(int i = 0; ; ++i){
 
 	std::string filename = worldPrefix + "." +
 	  std::to_string(currentFrame) + "." + std::to_string(i) + ".pts";
-	
+	std::cout << "trying to read " << filename << std::endl;
     std::ifstream inWorld(filename, std::ios::binary);
 	if(!inWorld){
 	  if(i == 0){
@@ -101,7 +101,8 @@ void readFrame(){
 
 	size_t numPoints;
 	size_t start = 0;
-	inWorld.read(reinterpret_cast<char*>(&numPoints), numPoints);
+	inWorld.read(reinterpret_cast<char*>(&numPoints), sizeof(numPoints));
+	std::cout << "points in file: " << numPoints << std::endl;
 	if(i == 0){
 	  positions.push_back(std::vector<Vec3>(numPoints));
 	} else {
@@ -111,6 +112,7 @@ void readFrame(){
 
 	inWorld.read(reinterpret_cast<char*>(positions.back().data() + start), numPoints*3*sizeof(double));
   }
+  std::cout << "num points: " << positions.back().size() << std::endl;
   if(colors.empty()){
 	assert(currentFrame == 0);
 	colors.resize(positions.front().size());
@@ -126,13 +128,14 @@ void readFrame(){
 void displayFrame(){
 
   Vec3 COM = Vec3::Zero();
+  assert(positions.size() > currentFrame);
   for(const auto& v : positions[currentFrame]){
 	COM += v;
   }
-
+  
   COM /= positions[currentFrame].size();
   center = COM;
-  
+
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glShadeModel(GL_SMOOTH);
@@ -186,6 +189,9 @@ void displayFrame(){
 	glColor3dv(colors[i].data());
 	
 	glPushMatrix();
+	if(!positions[currentFrame][i].allFinite()){
+	  std::cout << "nan particle" << std::endl;
+	}
 	glTranslated(positions[currentFrame][i].x(),
 		positions[currentFrame][i].y(),
 		positions[currentFrame][i].z());
@@ -217,12 +223,15 @@ void keyInput(unsigned char key, int x, int y) {
 
 void specialInput(int key, int x, int y){
   if(key == GLUT_KEY_RIGHT){
+	int times = (glutGetModifiers() & GLUT_ACTIVE_SHIFT) ? 10 : 1;
     std::cout << "right pressed" << std::endl;
-    currentFrame++;
-    std::cout << "currentFrame: " <<currentFrame << std::endl;
-    if(positions.size() < currentFrame){
-      readFrame();
-    }
+	for(int i = 0; i < times; ++i){
+	  currentFrame++;
+	  std::cout << "currentFrame: " <<currentFrame << std::endl;
+	  if(positions.size() <= currentFrame){
+		readFrame();
+	  }
+	}
     glutPostRedisplay();
   } else if (key == GLUT_KEY_LEFT){
     std::cout << "left pressed" << std::endl;

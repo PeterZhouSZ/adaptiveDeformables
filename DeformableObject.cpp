@@ -25,7 +25,11 @@ DeformableObject::DeformableObject(const Json::Value& jv){
   }
   mu = jv["mu"].asDouble();
 
-  
+  if(!jv.isMember("dampingFactor")){
+	throw std::runtime_error("you didn't specify dampingFactor for a deformable object");
+  }
+  dampingFactor = jv["dampingFactor"].asDouble();
+
   if(!jv.isMember("density")){
 	throw std::runtime_error("you didn't specify density for a deformable object");
   }
@@ -146,13 +150,20 @@ void DeformableObject::computeNeighbors(){
 	  neighbors = ag.getNearestNeighbors(particles, p.position, radius);
 	}
 
-	neighbors.erase(std::find(neighbors.begin(), neighbors.end(), i), neighbors.end());
+	
+	auto it = std::find(neighbors.begin(), neighbors.end(), i);
+	assert(it != neighbors.end());
+	neighbors.erase(it);
+
+	
+	
 	std::sort(neighbors.begin(), neighbors.end(),
 		[this, &p](int a, int b){
 		  return (particles[a].position - p.position).squaredNorm() <
 			(particles[b].position - p.position).squaredNorm();
 		});
 
+	
 	neighbors.resize(desiredNumNeighbors());
 
 	p.neighbors.resize(neighbors.size());
@@ -163,6 +174,8 @@ void DeformableObject::computeNeighbors(){
 	  p.neighbors[j].index = neighbors[j];
 	  p.neighbors[j].uij = particles[neighbors[j]].position - p.position;
 	  p.neighbors[j].wij = poly6(p.neighbors[j].uij.squaredNorm(), p.kernelRadius);
+
+
 	}
 	
   }
@@ -194,7 +207,7 @@ void DeformableObject::applyElasticForces(double dt){
 
 	Mat3 ux = Mat3::Zero();
 	for(const auto& n : p.neighbors){
-	  ux += n.wij*(p.position - particles[n.index].position)*n.uij.transpose();
+	  ux += n.wij*(particles[n.index].position - p.position)*n.uij.transpose();
 	}
 	
 	Mat3 F = ux*p.Ainv;
@@ -237,11 +250,15 @@ void DeformableObject::computeBasisAndVolume(){
   for(auto& p : particles){
 	Mat3 A = Mat3::Zero();
 	double wSum = 0;
+	std::cout << "num neighbors: " << p.neighbors.size() << std::endl;
 	for(const auto& n : p.neighbors){
+	  std::cout << "adding: " << std::endl << n.wij* n.uij* n.uij.transpose() << std::endl;
 	  A += n.wij* n.uij* n.uij.transpose();
 	  wSum += n.wij;
 	}
 	p.Ainv = A.inverse();
+	std::cout << "A: " << std::endl << A << std::endl << std::endl;
+	assert(p.Ainv.allFinite());
 	p.volume = std::sqrt(A.determinant()/std::pow(wSum, 3));
   }
   
@@ -269,5 +286,26 @@ void DeformableObject::dump(const std::string& filename) const{
 
   for(const auto& p : particles){
 	outs.write(reinterpret_cast<const char*>(p.position.data()), 3*sizeof(p.position.x()));
+  }
+}
+
+
+void DeformableObject::damp(double dt){
+  dampedVelocities.assign(particles.size(), Vec3::Zero());
+  for(auto i = 0; i < particles.size(); ++i){
+	auto& p = particles[i];
+	Vec3 vel = Vec3::Zero();
+	double wSum = 0;
+	for(const auto& n : p.neighbors){
+	  vel += n.wij*particles[n.index].velocity;
+	  wSum += n.wij;
+	}
+	vel /= wSum;
+	double alpha = dt*dampingFactor;
+	dampedVelocities[i] = (1 - alpha)*p.velocity + alpha*vel;
+  }
+
+  for(auto i = 0; i < particles.size(); ++i){
+	particles[i].velocity = dampedVelocities[i];
   }
 }

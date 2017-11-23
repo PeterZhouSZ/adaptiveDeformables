@@ -19,18 +19,27 @@ struct DeformableObject{
   void applyElasticForces(double dt);
   void updatePositions(double dt);
   void bounceOffGround();
+  void damp(double dt);
 
 
   //data
   std::vector<Particle> particles;
-  double lambda, mu, density;
+  double lambda, mu, density, dampingFactor;
   //static constants confuse me
-  int desiredNumNeighbors() const { return 16; } 
+  int desiredNumNeighbors() const { return 24; } 
 
+
+  void assertFinite() const{
+	for(const auto& p : particles){
+	  assert(p.position.allFinite());
+	  assert(p.velocity.allFinite());
+	}
+  }
+  
 private:
   //use to accumulate forces.  Stored as a member to avoid allocationg it each timestep
   std::vector<Vec3> forces;
-  
+  std::vector<Vec3> dampedVelocities; //same for damping
   
 };
 

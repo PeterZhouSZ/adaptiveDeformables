@@ -30,9 +30,19 @@ void World::step(){
   
   for(auto& d : dos){
 	d.applyGravity(dt);
+	d.assertFinite();
+
 	d.applyElasticForces(dt);
+	d.assertFinite();
+
+	d.damp(dt);
+	d.assertFinite();
+
 	d.updatePositions(dt);
+	d.assertFinite();
+
 	d.bounceOffGround();
+	d.assertFinite();
   }
   
 }
