@@ -250,14 +250,11 @@ void DeformableObject::computeBasisAndVolume(){
   for(auto& p : particles){
 	Mat3 A = Mat3::Zero();
 	double wSum = 0;
-	std::cout << "num neighbors: " << p.neighbors.size() << std::endl;
 	for(const auto& n : p.neighbors){
-	  std::cout << "adding: " << std::endl << n.wij* n.uij* n.uij.transpose() << std::endl;
 	  A += n.wij* n.uij* n.uij.transpose();
 	  wSum += n.wij;
 	}
 	p.Ainv = A.inverse();
-	std::cout << "A: " << std::endl << A << std::endl << std::endl;
 	assert(p.Ainv.allFinite());
 	p.volume = std::sqrt(A.determinant()/std::pow(wSum, 3));
   }

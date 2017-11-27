@@ -5,9 +5,9 @@
 		{
 			"particleFile" : "models/cube1m1000verts.pts" ,
 			"translation" : [0, 0.5, 0],
-			"lambda" : 3e2,
-			"mu" : 3e2,
-			"dampingFactor" : 10.0,
+			"lambda" : 4e2,
+			"mu" : 4e2,
+			"dampingFactor" : 20.0,
 			"density" : 600
 		}
 	]
