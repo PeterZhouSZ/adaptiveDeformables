@@ -13,27 +13,12 @@ DeformableObject::DeformableObject(const Json::Value& jv){
   std::ifstream ins(filename);
 
 
+  lambda = getOrThrow<double>(jv, "lambda");
+  mu = getOrThrow<double>(jv, "mu");
+  dampingFactor = getOrThrow<double>(jv,"dampingFactor");
+  density = getOrThrow<double>(jv, "density");
 
-  if(!jv.isMember("lambda")){
-	throw std::runtime_error("you didn't specify lambda for a deformable object");
-  }
-  lambda = jv["lambda"].asDouble();
-
-  
-  if(!jv.isMember("mu")){
-	throw std::runtime_error("you didn't specify mu for a deformable object");
-  }
-  mu = jv["mu"].asDouble();
-
-  if(!jv.isMember("dampingFactor")){
-	throw std::runtime_error("you didn't specify dampingFactor for a deformable object");
-  }
-  dampingFactor = jv["dampingFactor"].asDouble();
-
-  if(!jv.isMember("density")){
-	throw std::runtime_error("you didn't specify density for a deformable object");
-  }
-  density = jv["density"].asDouble();
+  hierarchyLevels = getOrThrow<int>(jv, "hierarchyLevels");
 
   Vec3 translation = Vec3::Zero();
   if(jv.isMember("translation")){
@@ -57,6 +42,9 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 
   computeNeighbors();
   computeBasisAndVolume();
+
+  computeHierarchy();
+
   
 }
 
@@ -122,7 +110,7 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
 	  break;
 	}
   }
-
+  std::sort(centers.begin(), centers.end());
   return centers;
 }
  
@@ -298,11 +286,45 @@ void DeformableObject::damp(double dt){
 	  wSum += n.wij;
 	}
 	vel /= wSum;
-	double alpha = dt*dampingFactor;
-	dampedVelocities[i] = (1 - alpha)*p.velocity + alpha*vel;
+	//	double alpha = dt*dampingFactor;
+	dampedVelocities[i] = vel; //(1 - alpha)*p.velocity + alpha*vel;
   }
 
   for(auto i = 0; i < particles.size(); ++i){
-	particles[i].velocity = dampedVelocities[i];
+	Vec3 impulse = 0.5*dt*dampingFactor*(dampedVelocities[i] - particles[i].velocity);
+	for(const auto& n : particles[i].neighbors){
+	  particles[i].velocity += n.wij*impulse;
+	  particles[n.index].velocity -= n.wij*impulse;
+
+	}
   }
+  /*
+  Vec3 dp = Vec3::Zero();
+  double ns = 0;
+  for(const auto& v : dampedVelocities){
+	dp += v;
+	ns += v.squaredNorm();
+  }
+  std::cout << "squared norm: " << ns << " dp : " << dp << std::endl;
+  */
+}
+
+
+void DeformableObject::computeHierarchy(){
+  hierarchy.resize(hierarchyLevels);
+
+  int n = std::sqrt(particles.size());
+  std::vector<int> indices(particles.size());
+  std::iota(indices.begin(), indices.end(), 0);
+  hierarchy.back() = kMeans(*this, indices, n);
+  
+  for(int level = hierarchyLevels - 2; level >= 0; --level){
+	n = std::sqrt(n);
+	hierarchy[level] = kMeans(*this, hierarchy[level +1], n);
+	
+	
+	
+  }
+  
+
 }

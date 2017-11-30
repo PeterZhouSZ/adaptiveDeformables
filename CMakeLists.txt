@@ -19,5 +19,5 @@ target_link_libraries(simulator Eigen3::Eigen jsoncpp_lib)
 
 add_executable(openglViewer openglViewer.cpp)
 target_include_directories(openglViewer PRIVATE ${GLUT_INCLUDE_DIR})
-target_link_libraries(openglViewer Eigen3::Eigen ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES})
+target_link_libraries(openglViewer Eigen3::Eigen ${GLUT_LIBRARIES} ${OPENGL_LIBRARIES} jsoncpp_lib)
 
