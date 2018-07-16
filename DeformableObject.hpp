@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <iostream>
 #include <json/json.h>
 #include "Particle.hpp"
 
@@ -9,34 +10,61 @@ struct DeformableObject{
   DeformableObject(const Json::Value& jv);
 
   void dump(const std::string& filename) const;
+
+  void dumpWithColor(const std::string& filename) const;
+  
+  //void writeHierarchy(const std::string& filename) const;
   
   //initialization stuff
   void computeNeighbors();
   void computeBasisAndVolume();
-  void computeHierarchy();
+  //void computeHierarchy();
 
   
   //timestepping methods
   void applyGravity(double dt);
   void applyElasticForces(double dt);
+  //void applyElasticForcesAdaptive(double dt);
+  void applyElasticForcesNoOvershoot(double dt);
+
   void updatePositions(double dt);
   void bounceOffGround();
   void damp(double dt);
+  void springDamping(double dt);
 
+  
+  Mat3 computeDeformationGradient(int pIndex) const;
+  
 
+  
   //data
   std::vector<Particle> particles;
   double lambda, mu, density, dampingFactor;
-  int hierarchyLevels;
-  //static constants confuse me
-  int desiredNumNeighbors() const { return 24; } 
+  //double scalingVarianceThreshold, angularVarianceThreshold;
+  //int hierarchyLevels, parentsPerParticle,
+  int neighborsPerParticle;
 
+  double particleSize;
+  
+  
+  //static constants confuse me
+  //int desiredNumNeighbors() const { return 24; } 
+
+  std::vector<RenderInfo> renderInfos;
+  
 
   void assertFinite() const{
 	for(const auto& p : particles){
-	  assert(p.position.allFinite());
-	  assert(p.velocity.allFinite());
+	  if(!p.position.allFinite()){
+		std::cout << "bad position! " << std::endl;
+		exit(1);
+	  }
+	  if(!p.velocity.allFinite()){
+		std::cout << "bad velocity!" << std::endl;
+		exit(1);
+	  }
 	}
+	std::cout << "all finite!" << std::endl;
   }
   
 private:
@@ -46,7 +74,7 @@ private:
 
 
   //hierarchy 0 is the smallest
-  std::vector<std::vector<int>> hierarchy;
+  //std::vector<std::vector<int>> hierarchy;
 
   
 };

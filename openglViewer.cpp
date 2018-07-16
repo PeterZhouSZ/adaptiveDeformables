@@ -44,8 +44,8 @@ float lightAmbient[4] = {.1f, .1f, .1f, 1.0f};
 
 int main(int argc, char** argv){
   if(argc < 2){
-    std::cout << "Usage: ./openglViewer worldPrefix \n"
-              << "(eg output/frame )\n";
+    std::cout << "Usage: ./openglViewer outputDirectory \n"
+              << "(eg output/ )\n";
     exit(1);
   }
   worldPrefix = std::string(argv[1]);
@@ -87,7 +87,7 @@ void readFrame(){
   std::cout << "loading frame: " << currentFrame << std::endl;
   for(int i = 0; ; ++i){
 
-	std::string filename = worldPrefix + "." +
+	std::string filename = worldPrefix + "/frame." +
 	  std::to_string(currentFrame) + "." + std::to_string(i) + ".pts";
 	std::cout << "trying to read " << filename << std::endl;
     std::ifstream inWorld(filename, std::ios::binary);
@@ -117,10 +117,28 @@ void readFrame(){
 	assert(currentFrame == 0);
 	colors.resize(positions.front().size());
 	for(auto& c : colors){
-	  c.x() = randDouble();
-	  c.y() = randDouble();
-	  c.z() = randDouble();
+	  c.x() = 0.5*randDouble();
+	  c.y() = 0.5*randDouble();
+	  c.z() = 0.5*randDouble();
 	}
+	//FIXME WILL BREAK WITH MULTIPLE OBJECTS!!!
+	/*
+	std::ifstream hierarchy(worldPrefix + std::string("hierarchy.0.hier"));
+	if(hierarchy){
+	  int nLevels;
+	  hierarchy >> nLevels;
+	  for(auto l = 0; l < nLevels -1; ++l){
+		int levelSize;
+		hierarchy >> levelSize;
+		for(int index = 0; index < levelSize; ++index){
+		  int pIndex;
+		  hierarchy >> pIndex;
+		  colors[pIndex].x() = static_cast<double>(nLevels - l)/nLevels;
+		  colors[pIndex].y() = 0;
+		  colors[pIndex].z() = 0;
+		}
+	  }
+	  }*/
   }
 }
 
@@ -176,7 +194,7 @@ void displayFrame(){
   gluPerspective(40*zoomFactor, (double)(windWidth)/windHeight, .5, 100);
 
 
-  glColor3d(.6,.6,.6);
+  glColor3d(1,1,1);
   glBegin(GL_QUADS);
   glVertex3d(-10,0,10);
   glVertex3d(-10,0, -10);

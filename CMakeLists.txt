@@ -8,7 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(simulator main.cpp DeformableObject.cpp World.cpp)
 
-
+add_executable(obj2pts obj2pts.cpp)
 
 find_package (Eigen3 3.3 REQUIRED NO_MODULE)
 find_package (jsoncpp REQUIRED NO_MODULE)

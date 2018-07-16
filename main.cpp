@@ -12,7 +12,6 @@ int main(int argc, char** argv){
 	std::cout << "usage: ./adaptiveDeformables <filename>" << std::endl;
 	return 1;
   }
-
   World world(argv[1]);
   DeformableObject d = world.dos.front();
 
@@ -23,13 +22,26 @@ int main(int argc, char** argv){
 
   auto clusters = kMeans(d, indices, 10);
 
+  //world.duration = 0.01;
+
+  double frameRate = 30;
+  double timePerFrame = 1/frameRate;
+
+  double nextFrame = 0;
+  
   while(world.elapsedTime <= world.duration){
-	world.dump();
-	world.step();
+	if(world.elapsedTime >= nextFrame){
+	  world.dumpMitsuba();
+	  --world.frameNumber;
+	  world.dump();
+	  nextFrame += timePerFrame;
+	}
+	world.stepNoOvershoot();
+	//world.step();
 	
 	std::cout << "time: " << world.elapsedTime << std::endl;
   }
   
-  
+  std::cout << "time spent simulation: " << world.simTime << std::endl;
   return 0;
 }

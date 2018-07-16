@@ -1,0 +1,73 @@
+{
+	"dt" : 0.0015,
+	"duration" : 10,
+	"deformableObjects" : [
+		{
+			"particleFile" : "models/3D_mesh_bunny_5k.pts" ,
+			"translation" : [0, 1.4, 0],
+			"lambda" : 1.4e2,
+			"mu" : 1.4e2,
+			"dampingFactor" : 160.0,
+			"density" : 250,
+
+
+			"hierarchyLevels" : 2,
+			"parentsPerParticle" : 6,
+			"neighborsPerParticle" : 32,
+
+			
+			"scalingVarianceThreshold" : 10000, //0.008,
+			"angularVarianceThreshold" : 100000, ///0.04,
+
+			"particleSize" : 0.05
+		}
+	],
+
+	"mitsubaInfo" : "<sensor type=\"perspective\">
+       <float name=\"farClip\" value=\"11.7366\"/>
+       <float name=\"focusDistance\" value=\"3.02502\"/>
+       <float name=\"fov\" value=\"45\"/>
+       <string name=\"fovAxis\" value=\"x\"/>
+       <float name=\"nearClip\" value=\"0.0228243\"/>
+       <transform name=\"toWorld\">
+
+       <lookat target=\"0, 0.95, 0\" origin=\"-8, 2.5, -1\" up=\"0, 1, 0\"/>
+       </transform>
+
+       <sampler type=\"independent\"> <integer name=\"sampleCount\" value=\"32\"/> </sampler>
+
+                <film type=\"hdrfilm\">
+                        <boolean name=\"banner\" value=\"false\" />
+                        <integer name=\"height\" value=\"540\"/>
+                        <integer name=\"width\" value=\"960\"/>
+
+                        <rfilter type=\"gaussian\"/>
+                </film>
+        </sensor>
+
+<emitter type=\"sunsky\"> 
+<float name=\"scale\" value=\"2\" />
+<boolean name=\"extend\" value=\"true\" />
+<float name=\"sunRadiusScale\" value=\"15\" />
+<transform name=\"toWorld\" >
+<rotate y=\"1\" angle=\"0\" />
+</transform>
+ </emitter>
+
+<shape type=\"rectangle\" >
+<bsdf type=\"diffuse\"><rgb name=\"reflectance\" value=\".7, .7, .7\" /></bsdf>
+<transform name=\"toWorld\" >
+<scale x=\"50\" y=\"50\" z=\"50\" />
+<rotate x=\"1\" angle=\"-90\" />
+</transform></shape>
+
+
+"
+	
+} //<vector name=\"sunDirection\" x=\"-100\" y=\"1000\" z=\"-1\" />
+
+
+//            skyProps.setFloat("scale", 2);
+//            skyProps.setTransform("toWorld", Transform::rotate(Vector(0,1,0), -120.0f));
+//            skyProps.setBoolean("extend", true);
+//            skyProps.setFloat("sunRadiusScale", 15);

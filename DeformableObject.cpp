@@ -5,6 +5,10 @@
 #include <json/json.h>
 
 #include "AccelerationGrid.hpp"
+#include "quatSVD.hpp"
+
+#include "KDTree.hpp"
+#include "SampleElimination.hpp"
 
 DeformableObject::DeformableObject(const Json::Value& jv){
 
@@ -18,8 +22,18 @@ DeformableObject::DeformableObject(const Json::Value& jv){
   dampingFactor = getOrThrow<double>(jv,"dampingFactor");
   density = getOrThrow<double>(jv, "density");
 
-  hierarchyLevels = getOrThrow<int>(jv, "hierarchyLevels");
+  
+  //hierarchyLevels = getOrThrow<int>(jv, "hierarchyLevels");
+  //parentsPerParticle = getOrThrow<int>(jv, "parentsPerParticle");
+  neighborsPerParticle = getOrThrow<int>(jv, "neighborsPerParticle");
 
+  
+  //scalingVarianceThreshold = getOrThrow<double>(jv, "scalingVarianceThreshold");
+  //angularVarianceThreshold = getOrThrow<double>(jv, "angularVarianceThreshold");
+
+
+  particleSize = getOrThrow<double>(jv, "particleSize");
+  
   Vec3 translation = Vec3::Zero();
   if(jv.isMember("translation")){
 	translation.x() = jv["translation"][0].asDouble();
@@ -33,9 +47,9 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 
   particles.resize(numParticles);
   for(size_t i = 0; i < numParticles; ++i){
-	ins.read(reinterpret_cast<char*>(&(particles[i].position.x())), sizeof(double));
-	ins.read(reinterpret_cast<char*>(&(particles[i].position.y())), sizeof(double));
-	ins.read(reinterpret_cast<char*>(&(particles[i].position.z())), sizeof(double));
+
+	ins.read(reinterpret_cast<char*>(particles[i].position.data()), 3*sizeof(double));
+
 	particles[i].position += translation;
 	particles[i].velocity = Vec3::Zero();
   }
@@ -43,8 +57,26 @@ DeformableObject::DeformableObject(const Json::Value& jv){
   computeNeighbors();
   computeBasisAndVolume();
 
-  computeHierarchy();
+  //computeHierarchy();
 
+  renderInfos.resize(particles.size());
+  std::random_device rd;  //Will be used to obtain a seed for the random number engine
+  std::mt19937 gen(rd()); //Standard mersenne_twister_engine seeded with rd()
+  std::uniform_real_distribution<> dis(0.0, 360);
+  
+  for(auto& ri : renderInfos){
+	ri.color = hsv2rgb(dis(gen), 0.75, 0.8);
+	ri.size = particleSize;
+  }
+
+  /*
+  auto pSize = particleSize;
+  for(const auto& level : hierarchy){
+	for(auto i : level){
+	  renderInfos[i].size = pSize;
+	}
+	pSize /= 2;
+	}*/
   
 }
 
@@ -61,9 +93,9 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
 
   std::sort(centers.begin(), centers.end());
 
-  for(auto c : centers){
+  /*  for(auto c : centers){
 	std::cout << c << std::endl;
-  }
+	}*/
   //number of points, and sum of those points positions
   std::vector<std::pair<int, Vec3> > centerInfo;
   
@@ -93,7 +125,7 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
 	for(auto i = 0; i < centers.size(); ++i){
 
 	  Vec3 com = centerInfo[i].second/centerInfo[i].first;
-	  std::cout << "com: " << com << std::endl;
+	  //std::cout << "com: " << com << std::endl;
 	  centers[i] = *std::min_element(indices.begin(), indices.end(),
 		  [&d, &com](int a, int b){
 			return (com - d.particles[a].position).squaredNorm() <
@@ -101,12 +133,8 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
 		  });
 	  
 	}
-	std::cout << "iter: "<< iter << std::endl;
-	for(auto c : centers){
-	  std::cout << c << std::endl;
-	}
 	if(centers == oldCenters){
-	  std::cout << "converged in " << iter << " iters" << std::endl;
+	  //std::cout << "converged in " << iter << " iters" << std::endl;
 	  break;
 	}
   }
@@ -117,26 +145,16 @@ std::vector<int> kMeans(const DeformableObject& d,  const std::vector<int>& indi
 
 void DeformableObject::computeNeighbors(){
 
-  struct GetPos{
-	Vec3 operator()(const Particle& p) const { return p.position; }
-  };
-
-  int nb = std::sqrt(std::sqrt(particles.size())); //use 4th root of n buckets?
-  AccelerationGrid<Particle, GetPos> ag(nb);
-  ag.updateGrid(particles);
+  std::vector<Vec3> positions(particles.size());
+  for(auto i = 0; i < particles.size(); ++i){ positions[i] = particles[i].position;}
   
-  auto delta = ag.getDelta();
-  double radius = std::min({delta.x(), delta.y(), delta.z()});
+  KDTree<Vec3, 3> kdTree(positions);
   
   for(int i = 0; i < particles.size(); ++i){
 	auto& p = particles[i];
 	
-	auto neighbors = ag.getNearestNeighbors(particles, p.position, radius);
-	while(neighbors.size() < (desiredNumNeighbors() + 1)){ //count p itself, which won't be a neighbor
-	  std::cout << "doubling radius" << std::endl;
-	  radius *= 2;
-	  neighbors = ag.getNearestNeighbors(particles, p.position, radius);
-	}
+
+	auto neighbors = kdTree.KNN(positions, positions[i], neighborsPerParticle + 1);
 
 	
 	auto it = std::find(neighbors.begin(), neighbors.end(), i);
@@ -145,38 +163,25 @@ void DeformableObject::computeNeighbors(){
 
 	
 	
-	std::sort(neighbors.begin(), neighbors.end(),
-		[this, &p](int a, int b){
-		  return (particles[a].position - p.position).squaredNorm() <
-			(particles[b].position - p.position).squaredNorm();
-		});
-
-	
-	neighbors.resize(desiredNumNeighbors());
-
+	assert(neighbors.size() == neighborsPerParticle);
 	p.neighbors.resize(neighbors.size());
 	//set the radius to be the distance to the furthest neighbor
-	p.kernelRadius = (particles[neighbors.back()].position - p.position).norm();
-	
+	//since KNN stores stuff in a max heap, front is the farthest
+	p.kernelRadius = 2*(particles[neighbors.front()].position - p.position).norm();
+	double wSum = 0;
 	for(auto j = 0; j < neighbors.size(); ++j){
 	  p.neighbors[j].index = neighbors[j];
 	  p.neighbors[j].uij = particles[neighbors[j]].position - p.position;
 	  p.neighbors[j].wij = poly6(p.neighbors[j].uij.squaredNorm(), p.kernelRadius);
+	  wSum += p.neighbors[j].wij;
 
-
+	}
+	for(auto & n : p.neighbors){
+	  n.wij /= wSum;
 	}
 	
   }
 
-
-
-  /*for(const auto& p : particles){
-	std::cout << "particle " << std::endl;
-	for(const auto& pr : p.neighbors){
-	  std::cout << pr.first << pr.second << std::endl;
-	}
-	std::cout << std::endl;
-	}*/
 }
 
 void DeformableObject::applyGravity(double dt){
@@ -186,6 +191,18 @@ void DeformableObject::applyGravity(double dt){
 }
 
 
+Mat3 DeformableObject::computeDeformationGradient(int pIndex) const{
+  auto& p = particles[pIndex];
+
+  Mat3 ux = Mat3::Zero();
+  for(const auto& n : p.neighbors){
+	ux += n.wij*(particles[n.index].position - p.position)*n.uij.transpose();
+  }
+  
+  return ux*p.Ainv;
+  
+}
+
 void DeformableObject::applyElasticForces(double dt){
 
   forces.assign(particles.size(), Vec3::Zero());
@@ -193,21 +210,17 @@ void DeformableObject::applyElasticForces(double dt){
   for(int i = 0; i < particles.size(); ++i){
 	auto& p = particles[i];
 
-	Mat3 ux = Mat3::Zero();
-	for(const auto& n : p.neighbors){
-	  ux += n.wij*(particles[n.index].position - p.position)*n.uij.transpose();
-	}
-	
-	Mat3 F = ux*p.Ainv;
+	auto F = computeDeformationGradient(i);
+	auto svd = QuatSVD::svd(F);
 
-	Eigen::JacobiSVD<Mat3> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
-	Vec3 FHat = svd.singularValues();
+	//Eigen::JacobiSVD<Mat3> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
+	Vec3 FHat = svd.S;//singularValues();
 	Vec3 diagStress = lambda*(FHat(0) + FHat(1) + FHat(2) - 3)*Vec3(1,1,1) +
 	  2*mu*(FHat - Vec3(1,1,1));
+	
+	Mat3 rotStress = svd.U.toRotationMatrix()*diagStress.asDiagonal()*(svd.V.toRotationMatrix().transpose());
 
-	Mat3 rotStress = svd.matrixU()*diagStress.asDiagonal()*svd.matrixV().transpose();
-
-	Mat3 forceCommon = p.volume*rotStress*p.Ainv;
+	Mat3 forceCommon = dt*p.volume*rotStress*p.Ainv;
 	
 	for(const auto& n : p.neighbors){
 	  Vec3 fi = forceCommon*(n.wij*n.uij);
@@ -221,8 +234,135 @@ void DeformableObject::applyElasticForces(double dt){
   for(int i = 0; i < particles.size(); ++i){
 	particles[i].velocity += forces[i]/(particles[i].volume*density);
   }
-  
+
+  assertFinite();
 }
+
+
+
+
+/*void DeformableObject::applyElasticForcesAdaptive(double dt){
+  forces.assign(particles.size(), Vec3::Zero());
+
+  for(auto i = 0; i < hierarchy[0].size(); ++i){
+	auto index = hierarchy[0][i];
+	auto& p = particles[index];
+
+	Mat3 F = computeDeformationGradient(index);
+	p.svd = QuatSVD::svd(F);
+	
+  }
+
+  //not interpolate for the rest
+  int interpedCount = 0, notInterpedCount = 0, badAngles = 0, badScales = 0;
+
+
+  std::vector<QuatSVD::EigenSVD<double> > svds;
+  std::vector<double> weights;
+  
+  for(int level = 1; level < hierarchy.size(); ++level){
+
+	for(int i = 0; i < hierarchy[level].size(); ++i){
+	  auto index = hierarchy[level][i];
+	  //	  std::cout << "index: " << index << std::endl;
+	  auto& p = particles[index];
+
+	  svds.resize(p.parents.size());
+	  weights.resize(p.parents.size());
+
+	  Vec3 sSquared = Vec3::Zero();
+	  double weightSum = 0;
+	  
+	  //	  std::cout << "SVDs" << std::endl;
+	  for(auto j = 0; j < p.parents.size(); ++j){
+		svds[j] = particles[p.parents[j].index].svd;
+		weights[j] = p.parents[j].wij;
+
+		weightSum += weights[j];
+		sSquared.x() += weights[j]*svds[j].S.x()*svds[j].S.x();
+		sSquared.y() += weights[j]*svds[j].S.y()*svds[j].S.y();
+		sSquared.z() += weights[j]*svds[j].S.z()*svds[j].S.z();
+
+		//		std::cout << svds[j].U << std::endl
+		//				  << svds[j].S << std::endl
+		//				  << svds[j].V << std::endl;
+		  
+		
+	  }
+	  sSquared /= (weightSum);
+	  auto interpedPolar = interpolateSVDsPolar(svds, weights);
+	  
+	  //	  Mat3 interpedF = interpedSVD.U.toRotationMatrix()*interpedSVD.S.asDiagonal()*
+	  //		interpedSVD.V.toRotationMatrix().transpose();
+	  
+		//	  double error = (interpedF - computeDeformationGradient(index)).norm();
+		
+	  //std::cout << "sSquared: " << sSquared << " interped S: " << interpedSVD.S << std::endl;
+	  
+	  double normalizedVariance = sSquared.sum()/(interpedPolar.S.squaredNorm()) - 1;
+	  normalizedVariance /= parentsPerParticle;
+	  assert(normalizedVariance > -1e-5); //variance should be positive...
+	  //std::cout << "nv: " <<  normalizedVariance << std::endl;
+
+	  double angleError = 0;
+
+	  //Quat totalR = interpedSVD.U*interpedSVD.V.conjugate();
+
+	  
+	  for(const auto& svd: svds){
+		angleError += square(interpedPolar.R.angularDistance(
+				svd.U*svd.V.conjugate()));
+	  }
+
+	  //std::cout << "angle error: " << angleError << std::endl;
+	  
+	  auto badScale = normalizedVariance > scalingVarianceThreshold;
+	  auto badAngle = angleError > angularVarianceThreshold;
+
+	  if(badScale) ++badScales;
+	  if(badAngle) ++badAngles;
+	  
+	  if(badScale || badAngle){
+		p.svd = QuatSVD::svd(computeDeformationGradient(index));
+		notInterpedCount++;
+	  } else {
+		p.svd = QuatSVD::svdFromPolar(interpedPolar.R, interpedPolar.S);
+		interpedCount++;
+	  }
+	  
+	}
+  }
+  std::cout << "interped: " << interpedCount << " not: " << notInterpedCount << " bad scales: " << badScales << " bad angles: " << badAngles << std::endl;  
+
+  //compute forces based on the deformation
+  for(auto i = 0; i < particles.size(); ++i){
+	auto& p = particles[i];
+	
+	Vec3 FHat = p.svd.S;
+	Vec3 diagStress = lambda*(FHat(0) + FHat(1) + FHat(2) - 3)*Vec3(1,1,1) +
+	  2*mu*(FHat - Vec3(1,1,1));
+
+	Mat3 rotStress = p.svd.U.toRotationMatrix()*
+	  diagStress.asDiagonal()*
+	  p.svd.V.toRotationMatrix().transpose();
+
+	Mat3 forceCommon = p.volume*rotStress*p.Ainv;
+	
+	for(const auto& n : p.neighbors){
+	  Vec3 fi = forceCommon*(n.wij*n.uij);
+	  forces[i] += fi;
+	  forces[n.index] -= fi;
+	}
+	
+  }
+  
+  
+  //now modify velocities
+  for(int i = 0; i < particles.size(); ++i){
+	particles[i].velocity += forces[i]/(particles[i].volume*density);
+  }
+ 
+  }*/
 
 
 void DeformableObject::updatePositions(double dt){
@@ -238,13 +378,14 @@ void DeformableObject::computeBasisAndVolume(){
   for(auto& p : particles){
 	Mat3 A = Mat3::Zero();
 	double wSum = 0;
+
 	for(const auto& n : p.neighbors){
 	  A += n.wij* n.uij* n.uij.transpose();
-	  wSum += n.wij;
+	  //	  wSum += n.wij;
 	}
 	p.Ainv = A.inverse();
 	assert(p.Ainv.allFinite());
-	p.volume = std::sqrt(A.determinant()/std::pow(wSum, 3));
+	p.volume = std::sqrt(A.determinant()); ///std::pow(wSum, 3));
   }
   
 }
@@ -274,20 +415,72 @@ void DeformableObject::dump(const std::string& filename) const{
   }
 }
 
+/*void DeformableObject::writeHierarchy(const std::string&filename) const{
+  std::ofstream outs(filename);
+  outs << hierarchy.size() << std::endl;
+  for(const auto& level : hierarchy){
+	outs << level.size() << std::endl;
+	for(auto i : level){
+	  outs << i << ' ';
+	}
+	outs << std::endl;
+  }
+  
+  }*/
+
+
+void DeformableObject::springDamping(double dt){
+  std::cout << "damping" << std::endl;
+  //actually damping impulses
+  dampedVelocities.assign(particles.size(), Vec3::Zero());
+  for(auto i = 0; i < particles.size(); ++i){
+	const auto& p = particles[i];
+
+	for(const auto& n : p.neighbors){
+	  const auto& np = particles[n.index];
+	  
+	  Vec3 xij = np.position - p.position;
+	  if(xij.squaredNorm() > 1e-3){
+		xij.normalize();
+	  } else {
+		xij = Vec3::Zero();
+	  }
+	  
+	  Vec3 vij = np.velocity - p.velocity;
+
+	  //project onto xij if reasonable.
+	  Vec3 dampedSpring= 0.5*dt*n.wij*dampingFactor*xij.dot(vij)*xij;
+	  
+	  
+	  dampedVelocities[i] += dampedSpring;
+	  dampedVelocities[n.index] -= dampedSpring;
+	  if(!dampedSpring.allFinite()){
+		std::cout << "nan!!! bad!!! " << i << std::endl;
+		std::cout << n.index << std::endl;
+		exit(1);
+	  }
+	}
+  }
+
+  for(auto i = 0; i < particles.size(); ++i){
+	particles[i].velocity += dampedVelocities[i];
+  }
+  
+
+}
 
 void DeformableObject::damp(double dt){
   dampedVelocities.assign(particles.size(), Vec3::Zero());
   for(auto i = 0; i < particles.size(); ++i){
 	auto& p = particles[i];
 	Vec3 vel = Vec3::Zero();
-	double wSum = 0;
+	//double wSum = 0;
 	for(const auto& n : p.neighbors){
 	  vel += n.wij*particles[n.index].velocity;
-	  wSum += n.wij;
+	  //wSum += n.wij;
 	}
-	vel /= wSum;
-	//	double alpha = dt*dampingFactor;
-	dampedVelocities[i] = vel; //(1 - alpha)*p.velocity + alpha*vel;
+	//vel /= wSum;
+	dampedVelocities[i] = vel; 
   }
 
   for(auto i = 0; i < particles.size(); ++i){
@@ -310,21 +503,174 @@ void DeformableObject::damp(double dt){
 }
 
 
-void DeformableObject::computeHierarchy(){
+
+
+/*void DeformableObject::computeHierarchy(){
   hierarchy.resize(hierarchyLevels);
 
-  int n = std::sqrt(particles.size());
+  int n = particles.size();
   std::vector<int> indices(particles.size());
   std::iota(indices.begin(), indices.end(), 0);
-  hierarchy.back() = kMeans(*this, indices, n);
+
+  //todo: do better
+  std::vector<Vec3> positions(particles.size());
+  std::transform(particles.begin(), particles.end(), positions.begin(),
+	  [](const Particle& p){ return p.position;});
+  
+  //
+  //hierarchy.back() = kMeans(*this, indices, n);
+  hierarchy.back() = indices;
   
   for(int level = hierarchyLevels - 2; level >= 0; --level){
-	n = std::sqrt(n);
+	n = n/4;
+	std::cout << "level " << level << " has " << n << " particles " << std::endl;
+
 	hierarchy[level] = kMeans(*this, hierarchy[level +1], n);
-	
-	
+	//hierarchy[level] = sampleEliminate(positions, hierarchy[level + 1], n);
+
+	//remove these from the next highest level (they shoudl already be removed from the lower ones
+	for(int i  = 0; i < hierarchy[level].size(); ++i){
+	  std::remove(hierarchy[level +1].begin(),
+		  hierarchy[level +1].begin() + hierarchy[level +1].size() - i,
+		  hierarchy[level][i]);
+	}
+	//erase the points at this level
+	hierarchy[level+1].erase(
+		hierarchy[level +1].begin() + (hierarchy[level + 1].size() - hierarchy[level].size()),
+		hierarchy[level +1].end());
 	
   }
-  
 
+  for(const auto& level: hierarchy){
+	std::cout << "level" << std::endl;
+	for(auto i : level){
+	  std::cout << i << ' ';
+	}
+	std::cout << std::endl;
+  }
+
+  //compute parents, starting from level0, which has no parents
+  for(auto levelIndex = 1; levelIndex < hierarchy.size(); ++levelIndex){
+	const auto& level = hierarchy[levelIndex];
+	//todo compute fastGrid for the parent level
+	
+	for(int i : level){
+	  assert(particles[i].parents.empty());
+
+	  //find the closest parents
+	  auto myPosition = particles[i].position;
+	  auto myRadius = particles[i].kernelRadius;
+	  
+	  auto start = hierarchy[levelIndex -1].begin();
+	  auto mid = parentsPerParticle <= hierarchy[levelIndex -1].size() ?
+		hierarchy[levelIndex -1].begin() + parentsPerParticle :
+		hierarchy[levelIndex -1].end();
+	  
+	  std::partial_sort(start, mid,
+		  hierarchy[levelIndex -1].end(),
+		  [this,&myPosition](int a, int b){
+			return (particles[a].position - myPosition).squaredNorm() <
+			  (particles[b].position - myPosition).squaredNorm();
+		  });
+
+	  particles[i].parents.resize(mid - start);
+	  std::transform(start, mid, particles[i].parents.begin(),
+		  [this, &myPosition, &myRadius](int a){
+			return Parent{a,
+				1.0/(myPosition - particles[a].position).squaredNorm()};
+					
+		  });
+	  
+	}
+	
+  }
+
+}*/
+
+
+void DeformableObject::dumpWithColor(const std::string& filename) const{
+
+    std::ofstream outs(filename, std::ios::binary);
+  if(!outs){
+	throw std::runtime_error("couldn't open output file");
+  }
+  
+  size_t np = particles.size();
+
+  outs.write(reinterpret_cast<const char*>(&np), sizeof(np));
+
+  for(auto i = 0; i < particles.size(); ++i){
+	const auto& p = particles[i];
+	outs.write(reinterpret_cast<const char*>(p.position.data()), 3*sizeof(p.position.x()));
+	outs.write(reinterpret_cast<const char*>(renderInfos.data() + i), 4*sizeof(double));
+  }
+
+  
+  
+}
+
+
+void DeformableObject::applyElasticForcesNoOvershoot(double dt){
+
+  forces.assign(particles.size(), Vec3::Zero());
+
+
+  int negAlphas = 0;
+  int bigAlphas = 0;
+  int fine= 0;
+
+  
+  for(int i = 0; i < particles.size(); ++i){
+	auto& p = particles[i];
+
+	auto F = computeDeformationGradient(i);
+	auto svd = QuatSVD::svd(F);
+
+	Vec3 FHat = svd.S;
+	Vec3 diagStress = lambda*(FHat(0) + FHat(1) + FHat(2) - 3)*Vec3(1,1,1) +
+	  2*mu*(FHat - Vec3(1,1,1));
+	
+	Mat3 rotStress = svd.U.toRotationMatrix()*diagStress.asDiagonal()*(svd.V.toRotationMatrix().transpose());
+
+	Mat3 forceCommon = dt*p.volume*rotStress*p.Ainv;
+
+	//From the polar decomp
+	Quat R = svd.U*svd.V.conjugate();
+	
+	for(const auto& n : p.neighbors){
+
+	  Vec3 goalPosition = R*n.uij;
+	  Vec3 err = goalPosition - (particles[n.index].position - p.position);
+	  
+	  
+	  Vec3 impulse  = forceCommon*(n.wij*n.uij);
+	  auto sqNorm = impulse.squaredNorm()*dt*dt;
+
+	  
+	  //applying the impulse to i, and its negative to n.index
+	  double alpha = sqNorm > 1e-6 ? dt*err.dot(-impulse)/sqNorm : 0;
+	  if(alpha < 0){
+		alpha = 0;
+		++negAlphas;
+	  } else if(alpha > 1){
+		alpha = 1;
+		++bigAlphas;
+	  } else {
+		++fine;
+	  }
+	  
+	  forces[i] += alpha*impulse;
+	  forces[n.index] -= alpha*impulse;
+	}
+	
+  }
+
+  //now modify velocities
+  for(int i = 0; i < particles.size(); ++i){
+	particles[i].velocity += forces[i]/(particles[i].volume*density);
+  }
+
+  std::cout << "fine " << fine << " negAlphas: " << negAlphas << " hugeAlphas: " << bigAlphas << std::endl;
+  
+  assertFinite();
 }
