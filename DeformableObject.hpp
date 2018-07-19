@@ -34,12 +34,16 @@ struct DeformableObject{
 
   
   Mat3 computeDeformationGradient(int pIndex) const;
-  
+  Mat3 computeDeformationGradientRBF(int pIndex) const;
+
+
+  void RBFInit();
 
   
   //data
   std::vector<Particle> particles;
   double lambda, mu, density, dampingFactor;
+  double rbfDelta;
   //double scalingVarianceThreshold, angularVarianceThreshold;
   //int hierarchyLevels, parentsPerParticle,
   int neighborsPerParticle;

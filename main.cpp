@@ -36,8 +36,8 @@ int main(int argc, char** argv){
 	  world.dump();
 	  nextFrame += timePerFrame;
 	}
-	world.stepNoOvershoot();
-	//world.step();
+	//world.stepNoOvershoot();
+	world.step();
 	
 	std::cout << "time: " << world.elapsedTime << std::endl;
   }

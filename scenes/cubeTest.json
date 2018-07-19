@@ -1,5 +1,5 @@
 {
-	"dt" : 0.01666667,
+	"dt" : 0.005,
 	"duration" : 10,
 	"deformableObjects" : [
 		{
@@ -11,10 +11,11 @@
 			"density" : 600,
 			"hierarchyLevels" : 2,
 			"parentsPerParticle" : 8,
-			"neighborsPerParticle" : 32,
+			"neighborsPerParticle" : 16,
 			"scalingVarianceThreshold" : 10000.00,
 			"angularVarianceThreshold" : 10000.00,
-			"particleSize" : 0.05
+			"particleSize" : 0.05,
+			"rbfDelta" : 0.7
 		}
 	]
 	

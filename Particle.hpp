@@ -30,4 +30,8 @@ struct Particle{
   std::vector<Neighbor> neighbors;
   //double wSum; //just normalize
   std::vector<Parent> parents;
+
+  std::vector<int> rbfIndices;
+  std::vector<Vec3> rbfWeights;
+  
 };

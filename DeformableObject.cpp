@@ -33,6 +33,8 @@ DeformableObject::DeformableObject(const Json::Value& jv){
 
 
   particleSize = getOrThrow<double>(jv, "particleSize");
+
+  rbfDelta = getOrThrow<double>(jv, "rbfDelta");
   
   Vec3 translation = Vec3::Zero();
   if(jv.isMember("translation")){
@@ -181,7 +183,7 @@ void DeformableObject::computeNeighbors(){
 	}
 	
   }
-
+  RBFInit();
 }
 
 void DeformableObject::applyGravity(double dt){
@@ -210,7 +212,8 @@ void DeformableObject::applyElasticForces(double dt){
   for(int i = 0; i < particles.size(); ++i){
 	auto& p = particles[i];
 
-	auto F = computeDeformationGradient(i);
+	//auto F = computeDeformationGradient(i);
+	auto F = computeDeformationGradientRBF(i);
 	auto svd = QuatSVD::svd(F);
 
 	//Eigen::JacobiSVD<Mat3> svd(F, Eigen::ComputeFullU | Eigen::ComputeFullV);
@@ -648,7 +651,7 @@ void DeformableObject::applyElasticForcesNoOvershoot(double dt){
 
 	  
 	  //applying the impulse to i, and its negative to n.index
-	  double alpha = sqNorm > 1e-6 ? dt*err.dot(-impulse)/sqNorm : 0;
+	  double alpha = sqNorm > 1e-6 ? dt*err.dot(-impulse)/sqNorm : 1;
 	  if(alpha < 0){
 		alpha = 0;
 		++negAlphas;
@@ -673,4 +676,96 @@ void DeformableObject::applyElasticForcesNoOvershoot(double dt){
   std::cout << "fine " << fine << " negAlphas: " << negAlphas << " hugeAlphas: " << bigAlphas << std::endl;
   
   assertFinite();
+}
+
+
+void DeformableObject::RBFInit(){
+
+  const int M = 4; //1 + x + y + z
+  const int m = 3;
+  
+  std::vector<Vec3> positions(particles.size());
+  for(auto i = 0; i < particles.size(); ++i){ positions[i] = particles[i].position;}
+  
+  KDTree<Vec3, 3> kdTree(positions);  
+
+  std::vector<bool> indicesInBall(positions.size(), false);
+  for(int i = 0; i < positions.size(); ++i){
+	if(!indicesInBall[i]){
+	  auto neighbors = kdTree.KNN(positions, positions[i], neighborsPerParticle);
+	  auto nRadius = (positions[neighbors[0]] - positions[i]).norm();
+	  std::vector<int> ballMembers;
+	  for(auto n : neighbors){
+		if( (positions[n] - positions[i]).norm() <= (1 - rbfDelta)*nRadius){
+		  ballMembers.push_back(n);
+		  indicesInBall[n] = true;
+		}
+	  }
+	  //Assemble matrices
+
+	  //A is symmetric, so only store the lower triangular part
+	  Eigen::MatrixXd A = Eigen::MatrixXd::Zero(neighbors.size() + 4, neighbors.size() + 4);
+	  Eigen::MatrixXd bx = Eigen::MatrixXd::Zero(neighbors.size() + 4, ballMembers.size());
+	  Eigen::MatrixXd by = Eigen::MatrixXd::Zero(neighbors.size() + 4, ballMembers.size());
+	  Eigen::MatrixXd bz = Eigen::MatrixXd::Zero(neighbors.size() + 4, ballMembers.size());
+
+	  for(int r = 0; r < neighbors.size(); ++r){
+		for(int c = 0; c < r; ++c){
+		  double dist = std::pow((positions[neighbors[r]] - positions[neighbors[c]]).norm(), m);
+		  A(r,c) = dist;
+		}
+
+		//fill in the monomials
+		A(neighbors.size(), r) = 1;
+		A(neighbors.size() +1, r) = positions[neighbors[r]].x();
+		A(neighbors.size() +2, r) = positions[neighbors[r]].y();
+		A(neighbors.size() +3, r) = positions[neighbors[r]].z();
+
+		//RHSs
+		for(int c = 0; c < ballMembers.size(); ++c){
+		  double scale = 3*(positions[neighbors[r]] - positions[ballMembers[c]]).squaredNorm();
+		  bx(r, c) = scale*positions[neighbors[r]].x();
+		  by(r, c) = scale*positions[neighbors[r]].y();
+		  bz(r, c) = scale*positions[neighbors[r]].z();
+		}
+	  }
+
+	  //the B phi block at the bottom
+	  for(int c = 0; c < ballMembers.size(); ++c){
+		bx(neighbors.size() + 1, c) = 1;
+		by(neighbors.size() + 2, c) = 1;
+		bz(neighbors.size() + 3, c) = 1;
+	  }
+
+	  Eigen::PartialPivLU<Eigen::MatrixXd> decomp(A.selfadjointView<Eigen::Lower>());
+	  Eigen::MatrixXd ddx = decomp.solve(bx);
+	  Eigen::MatrixXd ddy = decomp.solve(by);
+	  Eigen::MatrixXd ddz = decomp.solve(bz);
+
+	  for(auto bi = 0; bi < ballMembers.size(); ++bi){
+		int b = ballMembers[bi];
+		particles[b].rbfIndices.resize(neighbors.size());
+		particles[b].rbfWeights.resize(neighbors.size());
+
+		for(int pi = 0; pi < neighbors.size(); ++pi){
+		  particles[b].rbfIndices[pi] = neighbors[pi];
+		  particles[b].rbfWeights[pi] = Vec3(ddx(pi, bi), ddy(pi, bi), ddz(pi, bi));
+
+		}
+	  }
+	}
+  }
+  
+}
+
+Mat3 DeformableObject::computeDeformationGradientRBF(int pIndex) const{
+
+  Mat3 ret = Mat3::Zero();
+  const auto& p = particles[pIndex];
+  for(int i = 0; i < p.rbfIndices.size(); ++i){
+	ret.col(0) += p.rbfWeights[i].x()*particles[p.rbfIndices[i]].position;
+	ret.col(1) += p.rbfWeights[i].y()*particles[p.rbfIndices[i]].position;
+	ret.col(2) += p.rbfWeights[i].z()*particles[p.rbfIndices[i]].position;
+  }
+  return ret;
 }
